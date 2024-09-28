@@ -7,7 +7,7 @@ import "fmt"
 func ExampleSelectWithAdd() {
 	items := []string{"Vim", "Emacs", "Sublime", "VSCode", "Atom"}
 	index := -1
-	var result string
+	var result interface{}
 	var err error
 
 	for index < 0 {
@@ -20,7 +20,7 @@ func ExampleSelectWithAdd() {
 		index, result, err = prompt.Run()
 
 		if index == -1 {
-			items = append(items, result)
+			items = append(items, fmt.Sprintf("%v", result))
 		}
 	}
 

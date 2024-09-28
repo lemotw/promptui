@@ -116,24 +116,27 @@ type Key struct {
 // text/template syntax. Custom state, colors and background color are available for use inside
 // the templates and are documented inside the Variable section of the docs.
 //
-// Examples
+// # Examples
 //
 // text/templates use a special notation to display programmable content. Using the double bracket notation,
 // the value can be printed with specific helper functions. For example
 //
 // This displays the value given to the template as pure, unstylized text. Structs are transformed to string
 // with this notation.
-// 	'{{ . }}'
+//
+//	'{{ . }}'
 //
 // This displays the name property of the value colored in cyan
-// 	'{{ .Name | cyan }}'
+//
+//	'{{ .Name | cyan }}'
 //
 // This displays the label property of value colored in red with a cyan background-color
-// 	'{{ .Label | red | cyan }}'
+//
+//	'{{ .Label | red | cyan }}'
 //
 // See the doc of text/template for more info: https://golang.org/pkg/text/template/
 //
-// Notes
+// # Notes
 //
 // Setting any of these templates will remove the icons from the default templates. They must
 // be added back in each of their specific templates. The styles.go constants contains the default icons.
@@ -187,7 +190,7 @@ var SearchPrompt = "Search: "
 // value within to list. Run will keep the prompt alive until it has been canceled from
 // the command prompt or it has received a valid value. It will return the value and an error if any
 // occurred during the select's execution.
-func (s *Select) Run() (int, string, error) {
+func (s *Select) Run() (int, interface{}, error) {
 	return s.RunCursorAt(s.CursorPos, 0)
 }
 
@@ -197,7 +200,7 @@ func (s *Select) Run() (int, string, error) {
 // within to list. Run will keep the prompt alive until it has been canceled
 // from the command prompt or it has received a valid value. It will return
 // the value and an error if any occurred during the select's execution.
-func (s *Select) RunCursorAt(cursorPos, scroll int) (int, string, error) {
+func (s *Select) RunCursorAt(cursorPos, scroll int) (int, interface{}, error) {
 	if s.Size == 0 {
 		s.Size = 5
 	}
@@ -219,14 +222,14 @@ func (s *Select) RunCursorAt(cursorPos, scroll int) (int, string, error) {
 	return s.innerRun(cursorPos, scroll, ' ')
 }
 
-func (s *Select) innerRun(cursorPos, scroll int, top rune) (int, string, error) {
+func (s *Select) innerRun(cursorPos, scroll int, top rune) (int, interface{}, error) {
 	c := &readline.Config{
 		Stdin:  s.Stdin,
 		Stdout: s.Stdout,
 	}
 	err := c.Init()
 	if err != nil {
-		return 0, "", err
+		return 0, nil, err
 	}
 
 	c.Stdin = readline.NewCancelableStdin(c.Stdin)
@@ -240,7 +243,7 @@ func (s *Select) innerRun(cursorPos, scroll int, top rune) (int, string, error) 
 
 	rl, err := readline.NewEx(c)
 	if err != nil {
-		return 0, "", err
+		return 0, nil, err
 	}
 
 	rl.Write([]byte(hideCursor))
@@ -382,7 +385,7 @@ func (s *Select) innerRun(cursorPos, scroll int, top rune) (int, string, error) 
 		sb.Flush()
 		rl.Write([]byte(showCursor))
 		rl.Close()
-		return 0, "", err
+		return 0, nil, err
 	}
 
 	items, idx := s.list.Items()
@@ -399,7 +402,7 @@ func (s *Select) innerRun(cursorPos, scroll int, top rune) (int, string, error) 
 	rl.Write([]byte(showCursor))
 	rl.Close()
 
-	return s.list.Index(), fmt.Sprintf("%v", item), err
+	return s.list.Index(), item, err
 }
 
 // ScrollPosition returns the current scroll position.
@@ -524,13 +527,13 @@ type SelectWithAdd struct {
 // If the addLabel is selected in the list, this function will return a -1 index with the added label and no error.
 // Otherwise, it will return the index and the value of the selected item. In any case, if an error is triggered, it
 // will also return the error as its third return value.
-func (sa *SelectWithAdd) Run() (int, string, error) {
+func (sa *SelectWithAdd) Run() (int, interface{}, error) {
 	if len(sa.Items) > 0 {
 		newItems := append([]string{sa.AddLabel}, sa.Items...)
 
 		list, err := list.New(newItems, 5)
 		if err != nil {
-			return 0, "", err
+			return 0, nil, err
 		}
 
 		s := Select{
@@ -546,7 +549,7 @@ func (sa *SelectWithAdd) Run() (int, string, error) {
 
 		err = s.prepareTemplates()
 		if err != nil {
-			return 0, "", err
+			return 0, nil, err
 		}
 
 		selected, value, err := s.innerRun(1, 0, '+')
