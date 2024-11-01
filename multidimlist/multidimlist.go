@@ -182,6 +182,11 @@ func (l *List) DiveIn() error {
 
 // DiveOut moves the cursor to the previous layer of the list.
 func (l *List) DiveOut() error {
+	// check if the cursor is at the root
+	if len(l.cursor) == 1 {
+		return fmt.Errorf("cursor is at the root")
+	}
+
 	// run through the cursor to find the previous items
 	if l.originalItem == nil || reflect.TypeOf(l.originalItem).Kind() != reflect.Slice {
 		return fmt.Errorf("items %v is not a slice", l.originalItem)
