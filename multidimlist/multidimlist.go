@@ -75,7 +75,7 @@ func (l *List) Search(term string) {
 // CancelSearch stops the current search and returns the list to its
 // original order.
 func (l *List) CancelSearch() error {
-	l.cursor = []int{0}
+	l.cursor[len(l.cursor)-1] = 0
 	l.start = 0
 	l.scope = l.items
 
@@ -111,6 +111,11 @@ func (l *List) SetStart(i int) {
 	} else {
 		l.start = i
 	}
+}
+
+// GetCursor returns the current cursor position.
+func (l *List) GetCursor() []int {
+	return l.cursor
 }
 
 // SetCursor sets the position of the cursor in the list. Values out of bounds

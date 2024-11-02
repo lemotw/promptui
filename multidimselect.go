@@ -8,9 +8,58 @@ import (
 	"text/template"
 
 	"github.com/chzyer/readline"
-	"github.com/manifoldco/promptui/multidimlist"
-	"github.com/manifoldco/promptui/screenbuf"
+	"github.com/lemotw/promptui/multidimlist"
+	"github.com/lemotw/promptui/screenbuf"
 )
+
+// StdinWrapper wraps the original stdin reader and adds custom handling
+type StdinWrapper struct {
+	original io.Reader
+	onRead   func([]byte) (bool, error) // Callback for intercepting reads
+}
+
+// NewStdinWrapper creates a new stdin wrapper
+func NewStdinWrapper(original io.Reader, onRead func([]byte) (bool, error)) *StdinWrapper {
+	return &StdinWrapper{
+		original: original,
+		onRead:   onRead,
+	}
+}
+
+// Read implements io.Reader interface
+func (w *StdinWrapper) Read(p []byte) (n int, err error) {
+	// First read from original stdin
+	n, err = w.original.Read(p)
+	if err != nil {
+		return n, err
+	}
+
+	// If callback is set, process the input
+	if w.onRead != nil {
+		// Call callback to check if input is allowed
+		if shouldPass, callbackErr := w.onRead(p[:n]); !shouldPass {
+			if callbackErr != nil {
+				return 0, callbackErr
+			}
+			// If input is not allowed, return 0 length
+			return 0, nil
+		}
+	}
+
+	return n, err
+}
+
+// Close implements io.Closer interface
+func (w *StdinWrapper) Close() error {
+	if closer, ok := w.original.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
+}
+
+// EnterCallback is a function that is called when the user presses enter
+// The function should return true if the select should exit
+type EnterCallback func(item interface{}, cursor []int) (bool, error)
 
 type MultidimSelect struct {
 	// Label is the text displayed on top of the list
@@ -39,6 +88,9 @@ type MultidimSelect struct {
 
 	// Keys is the set of keys used to control the interface
 	Keys *MultidimSelectKeys
+
+	// EnterCallback is a function that is called when the user presses enter
+	EnterCallback EnterCallback
 
 	// Searcher is a function for filtering items
 	Searcher multidimlist.Searcher
@@ -118,8 +170,22 @@ func (s *MultidimSelect) RunCursorAt(cursorPos, scroll int) ([]int, interface{},
 }
 
 func (s *MultidimSelect) innerRun(cursorPos, scroll int, top rune) ([]int, interface{}, error) {
+	stdinWrapper := NewStdinWrapper(s.Stdin, func(p []byte) (bool, error) {
+		switch (rune)(p[0]) {
+		case KeyEnter:
+			items, idx := s.list.Items()
+			item := items[idx]
+
+			// If the enter callback returns true, exit the select
+			if s.EnterCallback != nil {
+				return s.EnterCallback(item, s.list.GetCursor())
+			}
+		}
+		return true, nil
+	})
+
 	c := &readline.Config{
-		Stdin:  s.Stdin,
+		Stdin:  stdinWrapper,
 		Stdout: s.Stdout,
 	}
 	err := c.Init()
@@ -154,7 +220,7 @@ func (s *MultidimSelect) innerRun(cursorPos, scroll int, top rune) ([]int, inter
 	c.SetListener(func(line []rune, pos int, key rune) ([]rune, int, bool) {
 		switch {
 		case key == KeyEnter:
-			return nil, 0, true
+			return nil, 0, false
 		case key == s.Keys.Next.Code || (key == 'j' && !searchMode):
 			s.list.Next()
 		case key == s.Keys.Prev.Code || (key == 'k' && !searchMode):
@@ -187,9 +253,9 @@ func (s *MultidimSelect) innerRun(cursorPos, scroll int, top rune) ([]int, inter
 				s.list.CancelSearch()
 			}
 		case key == s.Keys.PageUp.Code || (key == 'h' && !searchMode):
-			s.list.PageUp()
+			s.list.DiveOut()
 		case key == s.Keys.PageDown.Code || (key == 'l' && !searchMode):
-			s.list.PageDown()
+			s.list.DiveIn()
 		default:
 			if canSearch && searchMode {
 				cur.Update(string(line))

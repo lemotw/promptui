@@ -45,7 +45,7 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/manifoldco/promptui"
+	"github.com/lemotw/promptui"
 )
 
 func main() {
@@ -81,7 +81,7 @@ package main
 import (
 	"fmt"
 
-	"github.com/manifoldco/promptui"
+	"github.com/lemotw/promptui"
 )
 
 func main() {
