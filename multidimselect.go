@@ -12,51 +12,6 @@ import (
 	"github.com/lemotw/promptui/screenbuf"
 )
 
-// StdinWrapper wraps the original stdin reader and adds custom handling
-type StdinWrapper struct {
-	original io.Reader
-	onRead   func([]byte) (bool, error) // Callback for intercepting reads
-}
-
-// NewStdinWrapper creates a new stdin wrapper
-func NewStdinWrapper(original io.Reader, onRead func([]byte) (bool, error)) *StdinWrapper {
-	return &StdinWrapper{
-		original: original,
-		onRead:   onRead,
-	}
-}
-
-// Read implements io.Reader interface
-func (w *StdinWrapper) Read(p []byte) (n int, err error) {
-	// First read from original stdin
-	n, err = w.original.Read(p)
-	if err != nil {
-		return n, err
-	}
-
-	// If callback is set, process the input
-	if w.onRead != nil {
-		// Call callback to check if input is allowed
-		if shouldPass, callbackErr := w.onRead(p[:n]); !shouldPass {
-			if callbackErr != nil {
-				return 0, callbackErr
-			}
-			// If input is not allowed, return 0 length
-			return 0, nil
-		}
-	}
-
-	return n, err
-}
-
-// Close implements io.Closer interface
-func (w *StdinWrapper) Close() error {
-	if closer, ok := w.original.(io.Closer); ok {
-		return closer.Close()
-	}
-	return nil
-}
-
 // EnterCallback is a function that is called when the user presses enter
 // The function should return true if the select should exit
 type EnterCallback func(item interface{}, cursor []int) (bool, error)
@@ -124,6 +79,8 @@ type MultidimSelectKeys struct {
 }
 
 // MultidimSelectTemplates allows customizing the display
+// You can use the FuncMap to add custom functions to the templates.
+// joinSlice, isSlice, sliceLen, sliceItem and joinMap are available by default.
 type MultidimSelectTemplates struct {
 	Label    string
 	Active   string
@@ -170,7 +127,8 @@ func (s *MultidimSelect) RunCursorAt(cursorPos, scroll int) ([]int, interface{},
 }
 
 func (s *MultidimSelect) innerRun(cursorPos, scroll int, top rune) ([]int, interface{}, error) {
-	stdinWrapper := NewStdinWrapper(s.Stdin, func(p []byte) (bool, error) {
+	// Wrap stdin to intercept input
+	stdinWrapper := newStdinWrapper(s.Stdin, func(p []byte) (bool, error) {
 		switch (rune)(p[0]) {
 		case KeyEnter:
 			items, idx := s.list.Items()
@@ -401,7 +359,13 @@ func (s *MultidimSelect) prepareTemplates() error {
 	tpls.label = tpl
 
 	if tpls.Active == "" {
-		tpls.Active = fmt.Sprintf("%s {{ . | underline }}", IconSelect)
+		tpls.Active = fmt.Sprintf(`
+            {{- if isSlice . -}}
+                %s {{ joinSlice " & " . | underline }}
+            {{- else -}}
+                %s {{ . | underline }}
+            {{- end -}}
+        `, IconSelect, IconSelect)
 	}
 
 	tpl, err = template.New("").Funcs(tpls.FuncMap).Parse(tpls.Active)
@@ -411,7 +375,13 @@ func (s *MultidimSelect) prepareTemplates() error {
 	tpls.active = tpl
 
 	if tpls.Inactive == "" {
-		tpls.Inactive = "  {{.}}"
+		tpls.Inactive = `
+            {{- if isSlice . -}}
+                    {{ joinSlice " & " . }}
+            {{- else -}}
+                    {{ . }}
+            {{- end -}}
+        `
 	}
 
 	tpl, err = template.New("").Funcs(tpls.FuncMap).Parse(tpls.Inactive)
@@ -421,7 +391,13 @@ func (s *MultidimSelect) prepareTemplates() error {
 	tpls.inactive = tpl
 
 	if tpls.Selected == "" {
-		tpls.Selected = fmt.Sprintf(`{{ "%s" | green }} {{ . | faint }}`, IconGood)
+		tpls.Selected = fmt.Sprintf(`
+			{{ if isSlice . }}
+				{{ "%s" | green}} {{ joinSlice " & " . }}
+			{{ else }}
+			 	{{ "%s" | green}} {{ . }}
+			{{ end }}
+		`, IconGood, IconGood)
 	}
 
 	tpl, err = template.New("").Funcs(tpls.FuncMap).Parse(tpls.Selected)
@@ -496,4 +472,50 @@ func (s *MultidimSelect) renderHelp(search bool) []byte {
 	}
 
 	return render(s.Templates.help, keys)
+}
+
+// for hijacking stdin
+type stdinWrapper struct {
+	original io.Reader
+	onRead   func([]byte) (bool, error) // Callback for intercepting reads
+}
+
+func newStdinWrapper(original io.Reader, onRead func([]byte) (bool, error)) *stdinWrapper {
+	if original == nil {
+		original = readline.Stdin
+	}
+
+	return &stdinWrapper{
+		original: original,
+		onRead:   onRead,
+	}
+}
+
+func (w *stdinWrapper) Read(p []byte) (n int, err error) {
+	// First read from original stdin
+	n, err = w.original.Read(p)
+	if err != nil {
+		return n, err
+	}
+
+	// If callback is set, process the input
+	if w.onRead != nil {
+		// Call callback to check if input is allowed
+		if shouldPass, callbackErr := w.onRead(p[:n]); !shouldPass {
+			if callbackErr != nil {
+				return 0, callbackErr
+			}
+			// If input is not allowed, return 0 length
+			return 0, nil
+		}
+	}
+
+	return n, err
+}
+
+func (w *stdinWrapper) Close() error {
+	if closer, ok := w.original.(io.Closer); ok {
+		return closer.Close()
+	}
+	return nil
 }
