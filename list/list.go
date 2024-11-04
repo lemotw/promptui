@@ -1,3 +1,4 @@
+// Package list provides functionality for managing and navigating through lists.
 package list
 
 import (
@@ -19,12 +20,20 @@ const NotFound = -1
 // visible items. The list can be moved up, down by one item of time or an
 // entire page (ie: visible size). It keeps track of the current selected item.
 type List struct {
-	items    []*interface{}
-	scope    []*interface{}
-	cursor   int // cursor holds the index of the current selected item
-	size     int // size is the number of visible options
-	start    int
+	// items holds the full list of items
+	items []*interface{}
+	// scope holds the current visible or filtered items
+	scope []*interface{}
+	// Searcher is the function used for filtering items
 	Searcher Searcher
+
+	// cursor holds the index of the current selected item
+	cursor int
+	// size is the number of visible options
+	size int
+	// start is the index of the first visible item
+	start int
+	// padding occurs here
 }
 
 // New creates and initializes a list of searchable items. The items attribute must be a slice type with a

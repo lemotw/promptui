@@ -375,7 +375,7 @@ func TestMultiLayerListNavigation(t *testing.T) {
 		t.Fatalf("Failed to dive into first sublayer: %v", err)
 	}
 
-	items, active = list.Items()
+	items, _ = list.Items()
 	if len(items) != 2 || items[0] != "2.1" {
 		t.Errorf("First sublayer incorrect, got first item %v, want '2.1'", items[0])
 	}
@@ -386,7 +386,7 @@ func TestMultiLayerListNavigation(t *testing.T) {
 		t.Errorf("Cursor position incorrect in sublayer, got %v, want 1", cursor[len(cursor)-1])
 	}
 
-	items, active = list.Items()
+	items, _ = list.Items()
 	if len(items) != 2 || items[0] != "2.1" {
 		t.Errorf("First sublayer incorrect, got first item %v, want '2.1'", items[0])
 	}
@@ -396,7 +396,6 @@ func TestMultiLayerListNavigation(t *testing.T) {
 		t.Fatalf("Failed to dive out: %v", err)
 	}
 
-	items, active = list.Items()
 	index := list.Index()
 	if len(index) != 1 || index[0] != 1 {
 		t.Errorf("After diving out, index incorrect, got %v, want [1]", index)
@@ -406,7 +405,7 @@ func TestMultiLayerListNavigation(t *testing.T) {
 		t.Error("Should be able to page down")
 	}
 	list.PageDown()
-	items, active = list.Items()
+	items, _ = list.Items()
 	if len(items) != 2 {
 		t.Errorf("After page down, got %d items, want 2", len(items))
 	}
@@ -415,7 +414,7 @@ func TestMultiLayerListNavigation(t *testing.T) {
 		return reflect.TypeOf(item).Kind() == reflect.String && strings.Contains(item.(string), input)
 	}
 	list.Search("3")
-	items, active = list.Items()
+	items, _ = list.Items()
 	if len(items) != 1 || items[0] != "3" {
 		t.Errorf("Search result incorrect, got %v, want ['3']", items)
 	}
@@ -424,7 +423,7 @@ func TestMultiLayerListNavigation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to cancel search: %v", err)
 	}
-	items, active = list.Items()
+	items, _ = list.Items()
 	if len(items) != 2 {
 		t.Errorf("After cancel search, got %d items, want 2", len(items))
 	}

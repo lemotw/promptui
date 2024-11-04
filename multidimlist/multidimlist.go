@@ -1,3 +1,4 @@
+// Package multidimlist implements multi-dimensional list navigation and management.
 package multidimlist
 
 import (
@@ -19,13 +20,22 @@ const NotFound = -1
 // visible items. The list can be moved up, down by one item of time or an
 // entire page (ie: visible size). It keeps track of the current selected item.
 type List struct {
+	// originalItem holds the initial unprocessed item
 	originalItem interface{}
-	items        []*interface{}
-	scope        []*interface{}
-	cursor       []int // cursor holds the index of the current selected item
-	size         int   // size is the number of visible options
-	start        int
-	Searcher     Searcher
+
+	// items holds the full list of items
+	items []*interface{}
+	// scope holds the current visible or filtered items
+	scope []*interface{}
+	// cursor holds the indices of the current selected items across dimensions
+	cursor []int
+	// Searcher is the function used for filtering items
+	Searcher Searcher
+
+	// size is the number of visible options
+	size int
+	// start is the index of the first visible item
+	start int
 }
 
 // New creates and initializes a list of searchable items. The items attribute must be a slice type with a
@@ -301,6 +311,7 @@ func (l *List) Index() []int {
 	return []int{NotFound}
 }
 
+// Items returns the visible items and the index of the active item.
 func (l *List) Items() ([]interface{}, int) {
 	var result []interface{}
 	max := len(l.scope)

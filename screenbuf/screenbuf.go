@@ -1,3 +1,4 @@
+// Package screenbuf provides buffer management for screen output operations.
 package screenbuf
 
 import (

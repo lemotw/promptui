@@ -16,50 +16,42 @@ import (
 // The function should return true if the select should exit
 type EnterCallback func(item interface{}, cursor []int) (bool, error)
 
+// MultidimSelect is a select list that allows the user to navigate through a list of items
 type MultidimSelect struct {
 	// Label is the text displayed on top of the list
 	Label interface{}
-
 	// Items are the items to display inside the list
 	Items interface{}
 
+	// Templates can be used to customize the select output
+	Templates *MultidimSelectTemplates
+	// Keys is the set of keys used to control the interface
+	Keys *MultidimSelectKeys
+	// Internal list implementation
+	list *multidimlist.List
+	// Input/Output streams
+	Stdin  io.ReadCloser
+	Stdout io.WriteCloser
+	// A function that determines how to render the cursor
+	Pointer Pointer
+	// EnterCallback is a function that is called when the user presses enter
+	EnterCallback EnterCallback
+	// Searcher is a function for filtering items
+	Searcher multidimlist.Searcher
+
 	// Size is the number of items that should appear
 	Size int
-
 	// CursorPos is the initial position of the cursor
 	CursorPos int
 
 	// IsVimMode sets whether to use vim mode
 	IsVimMode bool
-
 	// HideHelp sets whether to hide help information
 	HideHelp bool
-
 	// HideSelected sets whether to hide the text displayed after selection
 	HideSelected bool
-
-	// Templates can be used to customize the select output
-	Templates *MultidimSelectTemplates
-
-	// Keys is the set of keys used to control the interface
-	Keys *MultidimSelectKeys
-
-	// EnterCallback is a function that is called when the user presses enter
-	EnterCallback EnterCallback
-
-	// Searcher is a function for filtering items
-	Searcher multidimlist.Searcher
-
 	// StartInSearchMode sets whether to start in search mode
 	StartInSearchMode bool
-
-	list *multidimlist.List
-
-	// A function that determines how to render the cursor
-	Pointer Pointer
-
-	Stdin  io.ReadCloser
-	Stdout io.WriteCloser
 }
 
 // MultidimSelectKeys defines the available keys
@@ -82,20 +74,28 @@ type MultidimSelectKeys struct {
 // You can use the FuncMap to add custom functions to the templates.
 // joinSlice, isSlice, sliceLen, sliceItem and joinMap are available by default.
 type MultidimSelectTemplates struct {
-	Label    string
-	Active   string
-	Inactive string
-	Selected string
-	Details  string
-	Help     string
-	FuncMap  template.FuncMap
-
+	// Compiled templates
 	label    *template.Template
 	active   *template.Template
 	inactive *template.Template
 	selected *template.Template
 	details  *template.Template
 	help     *template.Template
+	// Function map for template execution
+	FuncMap template.FuncMap
+
+	// Label is the text displayed on top of the list
+	Label string
+	// Active is the template for the currently selected item
+	Active string
+	// Inactive is the template for non-selected items
+	Inactive string
+	// Selected is the template for when an item is chosen
+	Selected string
+	// Details is the template for additional item information
+	Details string
+	// Help is the template for help text
+	Help string
 }
 
 // Run executes the select list
@@ -458,8 +458,8 @@ func (s *MultidimSelect) renderHelp(search bool) []byte {
 		PageUpKey   string
 		DiveInKey   string
 		DiveOutKey  string
-		Search      bool
 		SearchKey   string
+		Search      bool
 	}{
 		NextKey:     s.Keys.Next.Display,
 		PrevKey:     s.Keys.Prev.Display,
