@@ -9,8 +9,8 @@ import (
 	"text/template"
 
 	"github.com/chzyer/readline"
-	"github.com/manifoldco/promptui/list"
-	"github.com/manifoldco/promptui/screenbuf"
+	"github.com/lemotw/promptui/list"
+	"github.com/lemotw/promptui/screenbuf"
 )
 
 // SelectedAdd is used internally inside SelectWithAdd when the add option is selected in select mode.
@@ -38,30 +38,19 @@ type Select struct {
 	// For example, `{{ .Name }}` will display the name property of a struct.
 	Items interface{}
 
-	// Size is the number of items that should appear on the select before scrolling is necessary. Defaults to 5.
-	Size int
-
-	// CursorPos is the initial position of the cursor.
-	CursorPos int
-
-	// IsVimMode sets whether to use vim mode when using readline in the command prompt. Look at
-	// https://godoc.org/github.com/chzyer/readline#Config for more information on readline.
-	IsVimMode bool
-
-	// HideHelp sets whether to hide help information.
-	HideHelp bool
-
-	// HideSelected sets whether to hide the text displayed after an item is successfully selected.
-	HideSelected bool
-
 	// Templates can be used to customize the select output. If nil is passed, the
 	// default templates are used. See the SelectTemplates docs for more info.
 	Templates *SelectTemplates
-
 	// Keys is the set of keys used in select mode to control the command line interface. See the SelectKeys docs for
 	// more info.
 	Keys *SelectKeys
-
+	// Internal list implementation
+	list *list.List
+	// Input/Output streams
+	Stdin  io.ReadCloser
+	Stdout io.WriteCloser
+	// A function that determines how to render the cursor
+	Pointer Pointer
 	// Searcher is a function that can be implemented to refine the base searching algorithm in selects.
 	//
 	// Search is a function that will receive the searched term and the item's index and should return a boolean
@@ -69,17 +58,21 @@ type Select struct {
 	// it is implemented.
 	Searcher list.Searcher
 
+	// Size is the number of items that should appear on the select before scrolling is necessary. Defaults to 5.
+	Size int
+	// CursorPos is the initial position of the cursor.
+	CursorPos int
+
+	// IsVimMode sets whether to use vim mode when using readline in the command prompt. Look at
+	// https://godoc.org/github.com/chzyer/readline#Config for more information on readline.
+	IsVimMode bool
+	// HideHelp sets whether to hide help information.
+	HideHelp bool
+	// HideSelected sets whether to hide the text displayed after an item is successfully selected.
+	HideSelected bool
 	// StartInSearchMode sets whether or not the select mode should start in search mode or selection mode.
 	// For search mode to work, the Search property must be implemented.
 	StartInSearchMode bool
-
-	list *list.List
-
-	// A function that determines how to render the cursor
-	Pointer Pointer
-
-	Stdin  io.ReadCloser
-	Stdout io.WriteCloser
 }
 
 // SelectKeys defines the available keys used by select mode to enable the user to move around the list
@@ -103,13 +96,13 @@ type SelectKeys struct {
 
 // Key defines a keyboard code and a display representation for the help menu.
 type Key struct {
-	// Code is a rune that will be used to compare against typed keys with readline.
-	// Check https://github.com/chzyer/readline for a list of codes
-	Code rune
-
 	// Display is the string that will be displayed inside the help menu to help inform the user
 	// of which key to use on his keyboard for various functions.
 	Display string
+
+	// Code is a rune that will be used to compare against typed keys with readline.
+	// Check https://github.com/chzyer/readline for a list of codes
+	Code rune
 }
 
 // SelectTemplates allow a select list to be customized following stdlib
@@ -141,6 +134,21 @@ type Key struct {
 // Setting any of these templates will remove the icons from the default templates. They must
 // be added back in each of their specific templates. The styles.go constants contains the default icons.
 type SelectTemplates struct {
+	// Template instances
+	label    *template.Template
+	active   *template.Template
+	inactive *template.Template
+	selected *template.Template
+	details  *template.Template
+	help     *template.Template
+
+	// FuncMap is a map of helper functions that can be used inside of templates according to the text/template
+	// documentation.
+	//
+	// By default, FuncMap contains the color functions used to color the text in templates. If FuncMap
+	// is overridden, the colors functions must be added in the override from promptui.FuncMap to work.
+	FuncMap template.FuncMap
+
 	// Label is a text/template for the main command line label. Defaults to printing the label as it with
 	// the IconInitial.
 	Label string
@@ -167,20 +175,6 @@ type SelectTemplates struct {
 	// Help is a text/template for displaying instructions at the top. By default
 	// it shows keys for movement and search.
 	Help string
-
-	// FuncMap is a map of helper functions that can be used inside of templates according to the text/template
-	// documentation.
-	//
-	// By default, FuncMap contains the color functions used to color the text in templates. If FuncMap
-	// is overridden, the colors functions must be added in the override from promptui.FuncMap to work.
-	FuncMap template.FuncMap
-
-	label    *template.Template
-	active   *template.Template
-	inactive *template.Template
-	selected *template.Template
-	details  *template.Template
-	help     *template.Template
 }
 
 // SearchPrompt is the prompt displayed in search mode.
@@ -493,29 +487,25 @@ func (s *Select) prepareTemplates() error {
 // SelectWithAdd represents a list for selecting a single item inside a list of items with the possibility to
 // add new items to the list.
 type SelectWithAdd struct {
-	// Label is the text displayed on top of the list to direct input. The IconInitial value "?" will be
-	// appended automatically to the label so it does not need to be added.
-	Label string
-
 	// Items are the items to display inside the list. Each item will be listed individually with the
 	// AddLabel as the first item of the list.
 	Items []string
-
-	// AddLabel is the label used for the first item of the list that enables adding a new item.
-	// Selecting this item in the list displays the add item prompt using promptui/prompt.
-	AddLabel string
-
+	// a function that defines how to render the cursor
+	Pointer Pointer
 	// Validate is an optional function that fill be used against the entered value in the prompt to validate it.
 	// If the value is valid, it is returned to the callee to be added in the list.
 	Validate ValidateFunc
 
+	// Label is the text displayed on top of the list to direct input. The IconInitial value "?" will be
+	// appended automatically to the label so it does not need to be added.
+	Label string
+	// AddLabel is the label used for the first item of the list that enables adding a new item.
+	// Selecting this item in the list displays the add item prompt using promptui/prompt.
+	AddLabel string
+
 	// IsVimMode sets whether to use vim mode when using readline in the command prompt. Look at
 	// https://godoc.org/github.com/chzyer/readline#Config for more information on readline.
 	IsVimMode bool
-
-	// a function that defines how to render the cursor
-	Pointer Pointer
-
 	// HideHelp sets whether to hide help information.
 	HideHelp bool
 }
@@ -611,8 +601,8 @@ func (s *Select) renderHelp(b bool) []byte {
 		PrevKey     string
 		PageDownKey string
 		PageUpKey   string
-		Search      bool
 		SearchKey   string
+		Search      bool
 	}{
 		NextKey:     s.Keys.Next.Display,
 		PrevKey:     s.Keys.Prev.Display,

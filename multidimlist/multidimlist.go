@@ -1,5 +1,5 @@
-// Package list provides functionality for managing and navigating through lists.
-package list
+// Package multidimlist implements multi-dimensional list navigation and management.
+package multidimlist
 
 import (
 	"fmt"
@@ -10,7 +10,7 @@ import (
 // Searcher is a base function signature that is used inside select when activating the search mode.
 // If defined, it is called on each items of the select and should return a boolean for whether or not
 // the item fits the searched term.
-type Searcher func(input string, index int) bool
+type Searcher func(input string, item interface{}, index int) bool
 
 // NotFound is an index returned when no item was selected. This could
 // happen due to a search without results.
@@ -20,20 +20,22 @@ const NotFound = -1
 // visible items. The list can be moved up, down by one item of time or an
 // entire page (ie: visible size). It keeps track of the current selected item.
 type List struct {
+	// originalItem holds the initial unprocessed item
+	originalItem interface{}
+
 	// items holds the full list of items
 	items []*interface{}
 	// scope holds the current visible or filtered items
 	scope []*interface{}
+	// cursor holds the indices of the current selected items across dimensions
+	cursor []int
 	// Searcher is the function used for filtering items
 	Searcher Searcher
 
-	// cursor holds the index of the current selected item
-	cursor int
 	// size is the number of visible options
 	size int
 	// start is the index of the first visible item
 	start int
-	// padding occurs here
 }
 
 // New creates and initializes a list of searchable items. The items attribute must be a slice type with a
@@ -55,19 +57,19 @@ func New(items interface{}, size int) (*List, error) {
 		values[i] = &item
 	}
 
-	return &List{size: size, items: values, scope: values}, nil
+	return &List{size: size, originalItem: items, items: values, scope: values, cursor: []int{0}}, nil
 }
 
 // Prev moves the visible list back one item. If the selected item is out of
 // view, the new select item becomes the last visible item. If the list is
 // already at the top, nothing happens.
 func (l *List) Prev() {
-	if l.cursor > 0 {
-		l.cursor--
+	if l.cursor[len(l.cursor)-1] > 0 {
+		l.cursor[len(l.cursor)-1]--
 	}
 
-	if l.start > l.cursor {
-		l.start = l.cursor
+	if l.start > l.cursor[len(l.cursor)-1] {
+		l.start = l.cursor[len(l.cursor)-1]
 	}
 }
 
@@ -75,25 +77,28 @@ func (l *List) Prev() {
 // implement the searcher function signature for this functionality to work.
 func (l *List) Search(term string) {
 	term = strings.Trim(term, " ")
-	l.cursor = 0
+	l.cursor[len(l.cursor)-1] = 0
 	l.start = 0
 	l.search(term)
 }
 
 // CancelSearch stops the current search and returns the list to its
 // original order.
-func (l *List) CancelSearch() {
-	l.cursor = 0
+func (l *List) CancelSearch() error {
+	l.cursor[len(l.cursor)-1] = 0
 	l.start = 0
 	l.scope = l.items
+
+	return nil
 }
 
 func (l *List) search(term string) {
 	var scope []*interface{}
-
-	for i, item := range l.items {
-		if l.Searcher(term, i) {
-			scope = append(scope, item)
+	for i, item := range l.scope {
+		if item != nil {
+			if l.Searcher(term, *item, i) {
+				scope = append(scope, item)
+			}
 		}
 	}
 
@@ -111,11 +116,16 @@ func (l *List) SetStart(i int) {
 	if i < 0 {
 		i = 0
 	}
-	if i > l.cursor {
-		l.start = l.cursor
+	if i > l.cursor[len(l.cursor)-1] {
+		l.start = l.cursor[len(l.cursor)-1]
 	} else {
 		l.start = i
 	}
+}
+
+// GetCursor returns the current cursor position.
+func (l *List) GetCursor() []int {
+	return l.cursor
 }
 
 // SetCursor sets the position of the cursor in the list. Values out of bounds
@@ -128,12 +138,12 @@ func (l *List) SetCursor(i int) {
 	if i < 0 {
 		i = 0
 	}
-	l.cursor = i
+	l.cursor[len(l.cursor)-1] = i
 
-	if l.start > l.cursor {
-		l.start = l.cursor
-	} else if l.start+l.size <= l.cursor {
-		l.start = l.cursor - l.size + 1
+	if l.start > l.cursor[len(l.cursor)-1] {
+		l.start = l.cursor[len(l.cursor)-1]
+	} else if l.start+l.size <= l.cursor[len(l.cursor)-1] {
+		l.start = l.cursor[len(l.cursor)-1] - l.size + 1
 	}
 }
 
@@ -143,13 +153,87 @@ func (l *List) SetCursor(i int) {
 func (l *List) Next() {
 	max := len(l.scope) - 1
 
-	if l.cursor < max {
-		l.cursor++
+	if l.cursor[len(l.cursor)-1] < max {
+		l.cursor[len(l.cursor)-1]++
 	}
 
-	if l.start+l.size <= l.cursor {
-		l.start = l.cursor - l.size + 1
+	if l.start+l.size <= l.cursor[len(l.cursor)-1] {
+		l.start = l.cursor[len(l.cursor)-1] - l.size + 1
 	}
+}
+
+// DiveIn moves the cursor to the next layer of the list.
+func (l *List) DiveIn() error {
+	// check is selected item could be dived into
+	selected := l.scope[l.cursor[len(l.cursor)-1]]
+	selectedValue := reflect.ValueOf(*selected)
+
+	if selectedValue.Kind() != reflect.Slice {
+		return fmt.Errorf("selected item is not a list")
+	}
+
+	// find actual cursor index
+	for i, item := range l.items {
+		if item == selected {
+			l.cursor[len(l.cursor)-1] = i
+			break
+		}
+	}
+
+	// append 0 to cursor
+	l.cursor = append(l.cursor, 0)
+
+	// reset items and scope
+	values := make([]*interface{}, selectedValue.Len())
+	for i := range values {
+		item := selectedValue.Index(i).Interface()
+		values[i] = &item
+	}
+	l.scope = values
+	l.items = values
+
+	return nil
+}
+
+// DiveOut moves the cursor to the previous layer of the list.
+func (l *List) DiveOut() error {
+	// check if the cursor is at the root
+	if len(l.cursor) == 1 {
+		return fmt.Errorf("cursor is at the root")
+	}
+
+	// run through the cursor to find the previous items
+	if l.originalItem == nil || reflect.TypeOf(l.originalItem).Kind() != reflect.Slice {
+		return fmt.Errorf("items %v is not a slice", l.originalItem)
+	}
+
+	// get the original slice
+	slice := reflect.ValueOf(l.originalItem).Convert(reflect.TypeOf(l.originalItem))
+
+	// find the actual cursor index
+	for i, c := range l.cursor {
+		if len(l.cursor)-2 <= i {
+			break
+		}
+
+		slice = slice.Index(c).Elem()
+		if reflect.TypeOf(slice.Interface()).Kind() != reflect.Slice {
+			return fmt.Errorf("items %v is not a slice", slice)
+		}
+	}
+
+	// pop cursor index and reset items and scope
+	values := make([]*interface{}, slice.Len())
+	for i := range values {
+		item := slice.Index(i).Interface()
+		values[i] = &item
+	}
+
+	l.cursor = l.cursor[:len(l.cursor)-1]
+	l.items = values
+	l.scope = values
+
+	return nil
 }
 
 // PageUp moves the visible list backward by x items. Where x is the size of the
@@ -166,8 +250,8 @@ func (l *List) PageUp() {
 
 	cursor := l.start
 
-	if cursor < l.cursor {
-		l.cursor = cursor
+	if cursor < l.cursor[len(l.cursor)-1] {
+		l.cursor[len(l.cursor)-1] = cursor
 	}
 }
 
@@ -189,10 +273,10 @@ func (l *List) PageDown() {
 
 	cursor := l.start
 
-	if cursor == l.cursor {
-		l.cursor = len(l.scope) - 1
-	} else if cursor > l.cursor {
-		l.cursor = cursor
+	if cursor == l.cursor[len(l.cursor)-1] {
+		l.cursor[len(l.cursor)-1] = len(l.scope) - 1
+	} else if cursor > l.cursor[len(l.cursor)-1] {
+		l.cursor[len(l.cursor)-1] = cursor
 	}
 }
 
@@ -209,20 +293,25 @@ func (l *List) CanPageUp() bool {
 
 // Index returns the index of the item currently selected inside the searched list. If no item is selected,
 // the NotFound (-1) index is returned.
-func (l *List) Index() int {
-	selected := l.scope[l.cursor]
+func (l *List) Index() []int {
+	selected := l.scope[l.cursor[len(l.cursor)-1]]
+
+	rt := []int{}
+	for _, c := range l.cursor {
+		rt = append(rt, c)
+	}
 
 	for i, item := range l.items {
 		if item == selected {
-			return i
+			rt[len(rt)-1] = i
+			return rt
 		}
 	}
 
-	return NotFound
+	return []int{NotFound}
 }
 
-// Items returns a slice equal to the size of the list with the current visible
-// items and the index of the active item in this list.
+// Items returns the visible items and the index of the active item.
 func (l *List) Items() ([]interface{}, int) {
 	var result []interface{}
 	max := len(l.scope)
@@ -234,12 +323,13 @@ func (l *List) Items() ([]interface{}, int) {
 
 	active := NotFound
 
-	for i, j := l.start, 0; i < end; i, j = i+1, j+1 {
-		if l.cursor == i {
-			active = j
-		}
+	for i := l.start; i < end; i++ {
+		item := *l.scope[i]
+		result = append(result, item)
 
-		result = append(result, *l.scope[i])
+		if i == l.cursor[len(l.cursor)-1] {
+			active = i - l.start
+		}
 	}
 
 	return result, active

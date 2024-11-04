@@ -2,6 +2,7 @@ package promptui
 
 import (
 	"fmt"
+	"reflect"
 	"strconv"
 	"strings"
 	"text/template"
@@ -85,6 +86,12 @@ var FuncMap = template.FuncMap{
 	"faint":     Styler(FGFaint),
 	"italic":    Styler(FGItalic),
 	"underline": Styler(FGUnderline),
+
+	// slice helpers
+	"joinSlice": joinSlice,
+	"isSlice":   isSlice,
+	"sliceLen":  sliceLen,
+	"sliceItem": sliceItem,
 }
 
 func upLine(n uint) string {
@@ -93,6 +100,42 @@ func upLine(n uint) string {
 
 func movementCode(n uint, code rune) string {
 	return esc + strconv.FormatUint(uint64(n), 10) + string(code)
+}
+
+func joinSlice(sep string, slice interface{}) string {
+	// Get value and check if it's a slice
+	val := reflect.ValueOf(slice)
+	if val.Kind() != reflect.Slice {
+		return fmt.Sprintf("%v", slice)
+	}
+
+	// Build string representation
+	var items []string
+	for i := 0; i < val.Len(); i++ {
+		items = append(items, fmt.Sprintf("%v", val.Index(i).Interface()))
+	}
+
+	return strings.Join(items, sep)
+}
+
+func isSlice(v interface{}) bool {
+	return reflect.TypeOf(v).Kind() == reflect.Slice
+}
+
+func sliceLen(slice interface{}) int {
+	val := reflect.ValueOf(slice)
+	if val.Kind() != reflect.Slice {
+		return 0
+	}
+	return val.Len()
+}
+
+func sliceItem(slice interface{}, index int) interface{} {
+	val := reflect.ValueOf(slice)
+	if val.Kind() != reflect.Slice || index >= val.Len() {
+		return nil
+	}
+	return val.Index(index).Interface()
 }
 
 // Styler is a function that accepts multiple possible styling transforms from the state,

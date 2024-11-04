@@ -1,18 +1,33 @@
 package promptui
 
 import (
-	"bytes"
+	"fmt"
 	"testing"
-
-	"github.com/lemotw/promptui/screenbuf"
 )
 
-func TestSelectTemplateRender(t *testing.T) {
+func TestMultidimSelectTemplateRender(t *testing.T) {
 	t.Run("when using default style", func(t *testing.T) {
-		values := []string{"Zero"}
-		s := Select{
+		items := []interface{}{[]interface{}{
+			"Option 1.1",
+			[]interface{}{"Option 1.2.1", "Option 1.2.2"},
+			"Option 1.3",
+		},
+			"Option 2",
+			[]interface{}{
+				"Option 3.1",
+				"Option 3.2",
+			},
+			"Option 6",
+			"Option 7",
+			"Option 8",
+			"Option 9",
+			"Option 10",
+			"Option 11",
+		}
+
+		s := MultidimSelect{
 			Label: "Select Number",
-			Items: values,
+			Items: items,
 		}
 		err := s.prepareTemplates()
 		if err != nil {
@@ -25,20 +40,20 @@ func TestSelectTemplateRender(t *testing.T) {
 			t.Errorf("Expected label to eq %q, got %q", exp, result)
 		}
 
-		result = string(render(s.Templates.active, values[0]))
-		exp = "\x1b[1m▸\x1b[0m \x1b[4mZero\x1b[0m"
+		result = string(render(s.Templates.active, items[0]))
+		exp = "\x1b[1m▸\x1b[0m \x1b[4mOption 1.1 & [Option 1.2.1 Option 1.2.2] & Option 1.3\x1b[0m"
 		if result != exp {
 			t.Errorf("Expected active item to eq %q, got %q", exp, result)
 		}
 
-		result = string(render(s.Templates.inactive, values[0]))
-		exp = "  Zero"
+		result = string(render(s.Templates.inactive, items[0]))
+		exp = "Option 1.1 & [Option 1.2.1 Option 1.2.2] & Option 1.3"
 		if result != exp {
 			t.Errorf("Expected inactive item to eq %q, got %q", exp, result)
 		}
 
-		result = string(render(s.Templates.selected, values[0]))
-		exp = "\x1b[32m\x1b[32m✔\x1b[0m \x1b[2mZero\x1b[0m"
+		result = string(render(s.Templates.selected, items[0]))
+		exp = "\n\t\t\t\n\t\t\t\t\x1b[32m\x1b[32m✔\x1b[0m Option 1.1 & [Option 1.2.1 Option 1.2.2] & Option 1.3\n\t\t\t\n\t\t"
 		if result != exp {
 			t.Errorf("Expected selected item to eq %q, got %q", exp, result)
 		}
@@ -60,17 +75,33 @@ func TestSelectTemplateRender(t *testing.T) {
 			},
 		}
 
-		templates := &SelectTemplates{
-			Label:    "{{ . }}?",
-			Active:   "\U0001F525 {{ .Name | bold }} ({{ .HeatUnit | red | italic }})",
-			Inactive: "   {{ .Name | bold }} ({{ .HeatUnit | red | italic }})",
-			Selected: "\U0001F525 {{ .Name | red | bold }}",
-			Details: `Name: {{.Name}}
-Peppers: {{.Peppers}}
-Description: {{.Description}}`,
+		templates := &MultidimSelectTemplates{
+			Label: "{{ . }}?",
+
+			Active: fmt.Sprintf(`
+            {{- if isSlice . -}}
+                %s {{ joinSlice " : " . | underline }}
+            {{- else -}}
+                %s {{ . | underline }}
+            {{- end -}}
+			`, "\U0001F525", "\U0001F525"),
+			Inactive: `
+			{{- if isSlice . -}}
+				{{ joinSlice " & " . }}
+			{{- else -}}
+				{{ . }}
+			{{- end -}}`,
+			Selected: fmt.Sprintf(`
+			{{ if isSlice . }}
+				{{ "%s" | green}} {{ joinSlice " : " . }}
+			{{ else }}
+			 	{{ "%s" | green}} {{ . }}
+			{{ end }}
+			`, "\U0001F525", "\U0001F525"),
+			Details: `this is details, you select len {{ if isSlice . }} {{ sliceLen . }} {{ else }} 1 {{ end }}`,
 		}
 
-		s := Select{
+		s := MultidimSelect{
 			Label:     "Spicy Level",
 			Items:     peppers,
 			Templates: templates,
@@ -88,36 +119,36 @@ Description: {{.Description}}`,
 		}
 
 		result = string(render(s.Templates.active, peppers[0]))
-		exp = "🔥 \x1b[1mBell Pepper\x1b[0m (\x1b[3m\x1b[31m0\x1b[0m)"
+		exp = "🔥 \x1b[4m{Bell Pepper 0 1 Not very spicy!}\x1b[0m"
 		if result != exp {
 			t.Errorf("Expected active item to eq %q, got %q", exp, result)
 		}
 
 		result = string(render(s.Templates.inactive, peppers[0]))
-		exp = "   \x1b[1mBell Pepper\x1b[0m (\x1b[3m\x1b[31m0\x1b[0m)"
+		exp = "{Bell Pepper 0 1 Not very spicy!}"
 		if result != exp {
 			t.Errorf("Expected inactive item to eq %q, got %q", exp, result)
 		}
 
 		result = string(render(s.Templates.selected, peppers[0]))
-		exp = "🔥 \x1b[1m\x1b[31mBell Pepper\x1b[0m"
+		exp = "\n\t\t\t\n\t\t\t \t\x1b[32m🔥\x1b[0m {Bell Pepper 0 1 Not very spicy!}\n\t\t\t\n\t\t\t"
 		if result != exp {
 			t.Errorf("Expected selected item to eq %q, got %q", exp, result)
 		}
 
 		result = string(render(s.Templates.details, peppers[0]))
-		exp = "Name: Bell Pepper\nPeppers: 1\nDescription: Not very spicy!"
+		exp = "this is details, you select len  1 "
 		if result != exp {
 			t.Errorf("Expected selected item to eq %q, got %q", exp, result)
 		}
 	})
 
 	t.Run("when a template is invalid", func(t *testing.T) {
-		templates := &SelectTemplates{
+		templates := &MultidimSelectTemplates{
 			Label: "{{ . ",
 		}
 
-		s := Select{
+		s := MultidimSelect{
 			Label:     "Spicy Level",
 			Templates: templates,
 		}
@@ -129,11 +160,11 @@ Description: {{.Description}}`,
 	})
 
 	t.Run("when a template render fails", func(t *testing.T) {
-		templates := &SelectTemplates{
+		templates := &MultidimSelectTemplates{
 			Label: "{{ .InvalidName }}",
 		}
 
-		s := Select{
+		s := MultidimSelect{
 			Label:     struct{ Name string }{Name: "Pepper"},
 			Items:     []string{},
 			Templates: templates,
@@ -150,19 +181,4 @@ Description: {{.Description}}`,
 			t.Errorf("Expected label to eq %q, got %q", exp, result)
 		}
 	})
-}
-
-func TestClearScreen(t *testing.T) {
-	var buf bytes.Buffer
-	sb := screenbuf.New(&buf)
-
-	sb.WriteString("test")
-	clearScreen(sb)
-
-	got := buf.String()
-	except := "\x1b[1A\x1b[2K\r"
-
-	if except != got {
-		t.Errorf("expected %q, got %q", except, got)
-	}
 }

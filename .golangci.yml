@@ -1,26 +1,56 @@
 run:
-  deadline: 5m
+  # deadline has been deprecated, use timeout instead
+  timeout: 5m
+  
+  # Allow multiple parallel golangci-lint instances
+  allow-parallel-runners: true
+
+# All available settings of specific linters
+linters-settings:
+  # updated settings for modern golangci-lint
+  gofmt:
+    # simplify code: gofmt with `-s` option
+    simplify: true
+  
+  govet:
+    # Enable all analyzers
+    enable-all: true
+    # Disable specific analyzers
+    disable:
+      - shadow
+      - fieldalignment
+  
+  goimports:
+    local-prefixes: github.com/org/project
+    
+  revive:
+    # Replacement rules for golint
+    rules:
+      - name: exported
+        severity: warning
+        disabled: false
+      - name: package-comments
+        severity: warning
+        disabled: false
 
 issues:
   # Disable maximums so we see all issues
-  max-per-linter: 0
+  max-issues-per-linter: 0
   max-same-issues: 0
-
-  # golangci-lint ignores missing docstrings by default. That's no good!
+  
+  # Exclude default exclusions
   exclude-use-default: false
 
 linters:
   disable-all: true
   enable:
-    - misspell
-    - golint
-    - goimports
-    - ineffassign
-    - deadcode
-    - gofmt
-    - govet
-    - structcheck
-    - unconvert
-    - megacheck
-    - typecheck
-    - varcheck
+    # golint is deprecated, use revive instead
+    - revive        # replacement for golint
+    - goimports     # checks import formatting
+    - ineffassign   # detects ineffectual assignments
+    - unused        # replacement for deadcode, varcheck, structcheck
+    - gofmt         # checks formatting
+    - govet        # analyzes code for common mistakes
+    - unconvert    # removes unnecessary type conversions
+    - typecheck    # parses and type-checks Go code
+    - misspell     # finds commonly misspelled English words
