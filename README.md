@@ -1,3 +1,7 @@
+# Promptui Fork
+
+This is a fork of [manifoldco/promptui](https://github.com/manifoldco/promptui) with additional features and improvements.
+
 # promptui
 
 Interactive prompt for command-line applications.
